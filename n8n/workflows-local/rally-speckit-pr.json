@@ -1,0 +1,2254 @@
+{
+  "name": "Rally Story → Spec-Kit → Draft PR",
+  "nodes": [
+    {
+      "id": "385b4fe2-6704-5606-8abb-fdffcb1fb9d6",
+      "name": "Rally Story Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "authentication": "n8nUserAuth",
+        "formTitle": "Rally Story → Spec-Kit → Draft PR",
+        "formDescription": "Runs the CEC spec-kit delivery flow for a Rally story with Claude Code on the host, runs the repo's Terraform plan against a non-prod environment from the feature branch, then opens a DRAFT pull request linking that plan. If Claude needs to ask you something about the nonprod plan it posts to Slack and waits. Takes 30–120 minutes; follow progress under Executions.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Rally Story ID",
+              "placeholder": "US1234567",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Repository",
+              "placeholder": "org/repo on ghe.coxautoinc.com (empty = 'Repo: org/name' line in the story Notes)"
+            },
+            {
+              "fieldLabel": "Base Branch",
+              "placeholder": "leave empty for the repo's default branch"
+            }
+          ]
+        },
+        "responseMode": "responseNode",
+        "options": {
+          "path": "rally-speckit-pr"
+        }
+      },
+      "webhookId": "bccd2efe-ba7a-5e75-9b2e-51636ec20561"
+    },
+    {
+      "id": "a1c0f001-0001-0000-0000-000000000001",
+      "name": "Form Ack — Started",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.2,
+      "position": [110, 200],
+      "parameters": {
+        "operation": "completion",
+        "completionTitle": "Started",
+        "completionMessage": "Watch the run under Executions in n8n — a draft PR link appears in the Summary node when it finishes.",
+        "options": {}
+      }
+    },
+    {
+      "id": "a1c0f001-0002-0000-0000-000000000002",
+      "name": "Form Ack — Answers",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.2,
+      "position": [4510, -120],
+      "parameters": {
+        "operation": "completion",
+        "completionTitle": "Answers recorded",
+        "completionMessage": "Your answers were saved. The paused n8n run has resumed — check Executions for progress.",
+        "options": {}
+      }
+    },
+    {
+      "id": "a1c0f001-0003-0000-0000-000000000003",
+      "name": "Form Ack — Decision",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.2,
+      "position": [4510, 300],
+      "parameters": {
+        "operation": "completion",
+        "completionTitle": "Decision recorded",
+        "completionMessage": "Your decision was saved. The paused n8n run has resumed — check Executions for progress.",
+        "options": {}
+      }
+    },
+    {
+      "id": "93384910-33d1-5b8e-9f37-1433a589e9f4",
+      "name": "From Form",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        200
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ca65ae01-845c-50ab-8d68-f769b4a8c370",
+              "name": "storyId",
+              "value": "={{ $json['Rally Story ID'] }}",
+              "type": "string"
+            },
+            {
+              "id": "84a1c649-7724-534a-a1cd-2dc7fdff22b2",
+              "name": "repo",
+              "value": "={{ $json['Repository'] }}",
+              "type": "string"
+            },
+            {
+              "id": "ce280848-e54b-592d-ba15-d805e97cd5d6",
+              "name": "baseBranch",
+              "value": "={{ $json['Base Branch'] ?? '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a12351fa-0aab-54d2-b288-43372c934218",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        420
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rally-speckit-pr-api",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "72cca805-6406-5164-984c-ecd6592e1695"
+    },
+    {
+      "id": "47b9e9c8-1f80-563f-91fd-4ac366625c62",
+      "name": "Webhook Token OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        420
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "78d91fac-d2ce-50d7-af9a-855e862eae08",
+              "leftValue": "={{ $json.headers.authorization }}",
+              "rightValue": "=Bearer {{ $env.CLAUDE_BRIDGE_TOKEN }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "913ee1b0-723f-5ff9-971c-242eda5ed1d1",
+      "name": "Reject Webhook",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        440,
+        560
+      ],
+      "parameters": {
+        "errorMessage": "Webhook call rejected: send 'Authorization: Bearer $CLAUDE_BRIDGE_TOKEN' (from n8n/.env.sandbox)"
+      }
+    },
+    {
+      "id": "56b78f8c-a37d-527a-9798-5fed6d21fbc0",
+      "name": "From Webhook",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        420
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7b7a537e-f26d-518d-a07a-75cc249dd64a",
+              "name": "storyId",
+              "value": "={{ $json.body.storyId }}",
+              "type": "string"
+            },
+            {
+              "id": "028a8a1c-1cf1-591b-83d9-baf05a1e5ae6",
+              "name": "repo",
+              "value": "={{ $json.body.repo }}",
+              "type": "string"
+            },
+            {
+              "id": "5be02299-3d55-59ae-a4c7-770f1e933536",
+              "name": "baseBranch",
+              "value": "={{ $json.body.baseBranch ?? '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "264dbd17-d950-5bee-9792-f7e063020dac",
+      "name": "Normalize & Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Both triggers land here already mapped to { storyId, repo, baseBranch }.\nconst input = $input.first().json;\nconst storyId = String(input.storyId ?? '').trim().toUpperCase();\n// repo may be empty here: Extract Story then falls back to a \"Repo: org/name\" line in Notes\nconst repo = String(input.repo ?? '').trim().replace(/^https?:\\/\\/[^/]+\\//, '').replace(/\\.git$/, '').replace(/\\/+$/, '');\nconst baseBranch = String(input.baseBranch ?? '').trim();\n\nif (!/^US\\d+$/.test(storyId)) throw new Error(`Rally story ID must look like US1234567, got \"${storyId}\"`);\nif (repo && !/^[\\w.-]+\\/[\\w.-]+$/.test(repo)) throw new Error(`repository must be org/name on GHE, got \"${repo}\"`);\nif (baseBranch && !/^[\\w./-]+$/.test(baseBranch)) throw new Error(`invalid base branch \"${baseBranch}\"`);\n\nconst stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\\..*$/, '').replace('T', '-');\nreturn [{ json: { storyId, repo, baseBranch, runDir: `${storyId}-${stamp}` } }];\n"
+      }
+    },
+    {
+      "id": "937feb3a-db1b-5ed4-88f0-1bf98dad5ebd",
+      "name": "Job: Fetch Rally Story",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        520
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const c = $input.first().json;\nreturn [{ json: { kind: 'script', name: 'rally-story', label: 'Fetch Rally Story', args: [c.storyId], timeoutMin: 2 } }];\n"
+      }
+    },
+    {
+      "id": "137d68d9-c54d-5f8d-9752-8a3e56dacdf2",
+      "name": "Fetch Rally Story",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__CLAUDE_JOB_WORKFLOW_ID__"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "dabb27b9-139a-551a-98cb-365afedf6a95",
+      "name": "Extract Story",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const input = $('Normalize & Validate').first().json;\nconst s = $input.first().json.result; // rally.sh get — fetched with the host's $RALLY_API_KEY\n\nconst text = (html) => String(html ?? '')\n  .replace(/<br\\s*\\/?>/gi, '\\n').replace(/<\\/(p|div|li|h\\d)>/gi, '\\n').replace(/<li[^>]*>/gi, '- ')\n  .replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')\n  .replace(/&quot;/g, '\"').replace(/&#39;/g, \"'\").replace(/\\n{3,}/g, '\\n\\n').trim();\n\nconst story = {\n  formattedId: s.FormattedID,\n  objectId: s.ObjectID,\n  name: s.Name,\n  scheduleState: s.ScheduleState,\n  project: s.Project,\n  feature: s.Feature,\n  description: text(s.Description),\n  acceptanceCriteria: text(s.c_AcceptanceCriteria),\n  notes: text(s.Notes),\n  url: `https://rally1.rallydev.com/#/detail/userstory/${s.ObjectID}`,\n};\n\nconst storyText = [\n  `# ${story.formattedId}: ${story.name}`,\n  `Rally: ${story.url}`,\n  story.feature && `Parent Feature: ${story.feature}`,\n  story.project && `Rally Project: ${story.project}`,\n  `Schedule State: ${story.scheduleState}`,\n  '', '## Description', story.description || '(empty)',\n  '', '## Acceptance Criteria', story.acceptanceCriteria || '(none recorded in c_AcceptanceCriteria — check the Description)',\n  story.notes && `\\n## Notes\\n${story.notes}`,\n].filter(Boolean).join('\\n');\n\n// No repo on the form -> look for \"Repo: org/name\" (and optional \"Base: branch\") in Notes.\nlet { repo, baseBranch } = input;\nif (!repo) {\n  const m = story.notes.match(/^\\s*Repo:\\s*(?:https?:\\/\\/[^/\\s]+\\/)?([\\w.-]+\\/[\\w.-]+?)(?:\\.git)?\\s*$/mi);\n  if (!m) throw new Error(`No repository given, and ${input.storyId}'s Notes have no \"Repo: org/name\" line`);\n  repo = m[1];\n  const b = story.notes.match(/^\\s*Base:\\s*([\\w./-]+)\\s*$/mi);\n  if (!baseBranch && b) baseBranch = b[1];\n}\n\nreturn [{ json: { ...input, repo, baseBranch, story, storyText } }];\n"
+      }
+    },
+    {
+      "id": "7c147bc4-4fa7-5b72-a5eb-6a606a7a6288",
+      "name": "Job: Prepare Workspace",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const c = $('Extract Story').first().json;\n// Branch name is feature/<storyId>_<slug> — slug is the story title, non-alnum collapsed to '_'.\nconst slug = String(c.story.name || '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50);\nreturn [{ json: {\n  kind: 'script',\n  name: 'prepare-workspace',\n  label: 'Prepare Workspace',\n  args: [c.repo, c.baseBranch, c.storyId, c.runDir, slug],\n  timeoutMin: 15,\n} }];\n"
+      }
+    },
+    {
+      "id": "f06d0d53-3e98-5ac6-b888-cd16494f10e6",
+      "name": "Prepare Workspace",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1540,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__CLAUDE_JOB_WORKFLOW_ID__"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "25889a6c-c36f-58f6-ac2d-b4bbeeb05f98",
+      "name": "Build Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Shared context every Claude phase is prompted with.\nconst c = $('Extract Story').first().json;\nconst ws = $input.first().json.result; // prepare-workspace.sh JSON\n\nconst preamble = `You are running NON-INTERACTIVELY as one phase of an automated n8n pipeline:\nRally story -> CEC spec-kit delivery flow -> draft pull request.\nNobody is watching this session and nobody can answer questions. Never ask the user anything and\nnever wait for confirmation: make the best decision you can ground in the story, the repository\nand cec-knowledge, and write that decision down where the phase says to.\n\nContext:\n- Working directory: a fresh clone of ${c.repo} (GHE), on branch ${ws.branch}, cut from ${ws.base}.\n- Rally story: ${c.storyId} — ${c.story.name} (${c.story.url})\n- spec-kit ${ws.specifyInitialized ? 'skills were just installed/refreshed in this repo by the pipeline' : 'was already set up in this repo'}${ws.constitutionMissing ? '; the repo has no real constitution yet' : ''}.\n\nRules for every phase:\n- Follow the cec-sdlc:cec-deliver flow, but perform ONLY the phase described below — later\n  phases run as separate sessions and rely on the files you leave on disk.\n- Use cec-sdlc:cec-knowledge whenever you need CEC grounding (components, flows, standards, repo ownership).\n- Do NOT run cec-finalize or cec-costs-telemetry. Do NOT create or update anything in Rally.\n- Do NOT git push, open, update or merge pull requests — the pipeline does that after the last phase.`;\n\nconst statusRule = `\nFinish your reply with one final line, exactly one of:\nSTATUS: OK\nSTATUS: BLOCKED: <one-line reason>\nUse BLOCKED only when this phase cannot be completed correctly (for example the story is not\nscoped to this repository, or a CRITICAL problem remains).`;\n\n// Per-phase model policy (host `claude --model` strings). Development phases run on Opus 4.8;\n// the cheap PR-body write runs on Haiku 4.5; any phase that fails is retried once on Opus 5.5\n// (the newest model, so it doubles as the failover if a pinned id is ever retired).\nconst models = {\n  dev: 'claude-opus-4-8',\n  discovery: 'claude-haiku-4-5-20251001',\n  retry: 'claude-opus-5-5',\n};\n\nreturn [{ json: { ...c, workspace: ws, preamble, statusRule, models } }];\n"
+      }
+    },
+    {
+      "id": "39b53bdb-8cad-507b-b87f-bfecc521cc9f",
+      "name": "Job: Seed + Specify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        520
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const c = $('Build Context').first().json;\nconst phase = `PHASE 1/6 — seed + specify.\n${c.workspace.constitutionMissing ? `0. This repo has no spec-kit constitution yet. First run the speckit-constitution skill (with the\n   cec-sdlc:cec-constitution overlay) to write .specify/memory/constitution.md from what this\n   repository actually is: its language, frameworks, test setup and conventions.\n` : ''}1. Run the cec-sdlc:cec-rally-seed skill for ${c.storyId}. It fetches the Story and its parent\n   Feature and assembles the seed. If the Rally MCP tools are unavailable, use the story snapshot\n   below as the seed instead. If the seed shows the story is NOT scoped to ${c.repo}, stop and\n   report BLOCKED.\n2. Run the speckit-specify skill with that seed as the feature description. Leave genuine open\n   questions as [NEEDS CLARIFICATION] markers; the next phase resolves them.\n3. Reply with the feature directory path (specs/...) and a 3-line summary.\n\nStory snapshot, fetched from the Rally REST API when the pipeline started:\n---\n${c.storyText}\n---`;\nreturn [{ json: {\n  kind: 'claude',\n  label: \"Seed + Specify\",\n  model: c.models.dev,\n  retryModel: c.models.retry,\n  cwd: c.runDir,\n  timeoutMin: 45,\n  requireStatusOk: true,\n  prompt: `${c.preamble}\\n\\n${phase}\\n${c.statusRule}`,\n} }];\n"
+      }
+    },
+    {
+      "id": "c7b9e09d-7e25-5835-ac59-f49be5891d68",
+      "name": "Seed + Specify",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1980,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__CLAUDE_JOB_WORKFLOW_ID__"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "39602929-1f02-5059-9560-9e71aaea9f58",
+      "name": "Job: Clarify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        520
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const c = $('Build Context').first().json;\nconst phase = `PHASE 2/6 — clarify.\nRun the speckit-clarify skill on the current feature spec (the newest directory under specs/).\nYou are the only one who can answer its questions. Answer each one yourself, picking the option\nbest supported by the Rally story, the existing code and conventions in this repo, and\ncec-knowledge. Apply the answers to spec.md exactly as the skill normally would.\n\nThen add (or extend) a section at the end of spec.md:\n\n## Assumptions (autonomous clarify)\n| # | Question | Chosen answer | Why |\n\nList every question you answered, including any [NEEDS CLARIFICATION] markers you resolved.\nReviewers will check this table on the PR, so be specific. No [NEEDS CLARIFICATION] markers may\nremain in spec.md when you finish.`;\nreturn [{ json: {\n  kind: 'claude',\n  label: \"Clarify\",\n  model: c.models.dev,\n  retryModel: c.models.retry,\n  cwd: c.runDir,\n  timeoutMin: 30,\n  requireStatusOk: true,\n  prompt: `${c.preamble}\\n\\n${phase}\\n${c.statusRule}`,\n} }];\n"
+      }
+    },
+    {
+      "id": "cbe63104-f434-5e60-8a6d-08bad0321390",
+      "name": "Clarify",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2200,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__CLAUDE_JOB_WORKFLOW_ID__"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "a7ff21f3-0dcf-51e0-96a7-649055261b10",
+      "name": "Job: Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        520
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const c = $('Build Context').first().json;\nconst phase = `PHASE 3/6 — plan.\nRun the speckit-plan skill for the current feature. Ground the technical decisions in the\nexisting codebase (read it; match its structure, frameworks and test setup) and in cec-knowledge\n(components, standards, NFRs). Reply with the list of artifacts you created.`;\nreturn [{ json: {\n  kind: 'claude',\n  label: \"Plan\",\n  model: c.models.dev,\n  retryModel: c.models.retry,\n  cwd: c.runDir,\n  timeoutMin: 45,\n  requireStatusOk: true,\n  prompt: `${c.preamble}\\n\\n${phase}\\n${c.statusRule}`,\n} }];\n"
+      }
+    },
+    {
+      "id": "dafe2ea6-7e3c-53d0-b3a5-6382f25d467d",
+      "name": "Plan",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2420,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__CLAUDE_JOB_WORKFLOW_ID__"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "82c22190-da85-54ee-b15f-c47adf35e6a3",
+      "name": "Job: Tasks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        520
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const c = $('Build Context').first().json;\nconst phase = `PHASE 4/6 — tasks.\nRun the speckit-tasks skill for the current feature, based on spec.md and plan.md. Tasks must be\nconcrete enough to implement without further questions, and must include the tests the CEC Test\nStandard calls for at component level. Reply with the task count per phase.`;\nreturn [{ json: {\n  kind: 'claude',\n  label: \"Tasks\",\n  model: c.models.dev,\n  retryModel: c.models.retry,\n  cwd: c.runDir,\n  timeoutMin: 30,\n  requireStatusOk: true,\n  prompt: `${c.preamble}\\n\\n${phase}\\n${c.statusRule}`,\n} }];\n"
+      }
+    },
+    {
+      "id": "8e101ef8-4585-5e17-a857-c23519762c6b",
+      "name": "Tasks",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2640,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__CLAUDE_JOB_WORKFLOW_ID__"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "857854f1-1ffb-5dac-9198-307371722ab9",
+      "name": "Job: Analyze",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        520
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const c = $('Build Context').first().json;\nconst phase = `PHASE 5/6 — analyze.\nRun the speckit-analyze skill for the current feature. It only reports. After it reports, fix\nevery CRITICAL and HIGH finding yourself by editing spec.md, plan.md and/or tasks.md, then run\nspeckit-analyze once more to confirm. Reply with the findings you fixed and any MEDIUM/LOW ones\nyou deliberately left. If a CRITICAL finding still remains after your fixes, report BLOCKED.`;\nreturn [{ json: {\n  kind: 'claude',\n  label: \"Analyze\",\n  model: c.models.dev,\n  retryModel: c.models.retry,\n  cwd: c.runDir,\n  timeoutMin: 30,\n  requireStatusOk: true,\n  prompt: `${c.preamble}\\n\\n${phase}\\n${c.statusRule}`,\n} }];\n"
+      }
+    },
+    {
+      "id": "c162f828-666d-50d6-89c1-a5169b705c83",
+      "name": "Analyze",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2860,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__CLAUDE_JOB_WORKFLOW_ID__"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "1556028e-1d16-59b8-ae75-a19a63047f19",
+      "name": "Job: Implement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        520
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const c = $('Build Context').first().json;\nconst phase = `PHASE 6/6 — implement.\nRun the speckit-implement skill for the current feature, working through tasks.md in order and\nchecking each task off as you finish it.\n- Run the repository's build and tests with its own tooling (see plan.md) and fix any failure you\n  introduced. If they cannot run in this environment (missing services, credentials, etc.), say\n  exactly what you could not run and why.\n- FIRST commit the spec-kit artifacts for traceability — specs/ (spec.md, plan.md, tasks.md and\n  the rest), plus .specify/ and .claude/skills/ if this pipeline added them — with message\n  \"${c.storyId}: spec-kit artifacts\". Do this before the code so the specs are on the branch even\n  if implementation stalls. Then commit the implementation in logical steps, every message\n  prefixed \"${c.storyId}: \".\n- Do not push.\nReply with: tasks done, tasks skipped (and why), and the test commands you ran with their results.`;\nreturn [{ json: {\n  kind: 'claude',\n  label: \"Implement\",\n  model: c.models.dev,\n  retryModel: c.models.retry,\n  cwd: c.runDir,\n  timeoutMin: 150,\n  requireStatusOk: true,\n  prompt: `${c.preamble}\\n\\n${phase}\\n${c.statusRule}`,\n} }];\n"
+      }
+    },
+    {
+      "id": "d08f1d53-a4cf-51ea-b47e-325f2f649087",
+      "name": "Implement",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3080,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__CLAUDE_JOB_WORKFLOW_ID__"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "0452a194-11ef-544e-8c80-00fc58d5125e",
+      "name": "Job: Write PR Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4620,
+        520
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const c = $('Build Context').first().json;\nconst phase = `FINAL STEP — write the pull request description. Do not change any files.\nRead the current feature's spec.md (including \"Assumptions (autonomous clarify)\"), plan.md and\ntasks.md, and run: git log --oneline origin/${c.workspace.base}..HEAD and git diff --stat origin/${c.workspace.base}...HEAD\n\nOutput ONLY the PR body as GitHub-flavoured markdown: no preamble, no closing remarks, no code\nfence around the whole body, and no STATUS line. Use these sections:\n## Summary\n## Rally\n${c.story.url} (${c.storyId}: ${c.story.name})\n## What changed\n## Autonomous clarify assumptions\n(copy the assumptions table verbatim; reviewers must check these)\n## Tasks\n(done / skipped, with the reason for anything skipped)\n## Tests\n(what ran and the results; what could not run)\n## Open questions & risks\n\nDo not write a nonprod / Terraform plan section: the pipeline appends one with the run link.`;\nreturn [{ json: {\n  kind: 'claude',\n  label: \"Write PR Body\",\n  model: c.models.discovery,\n  retryModel: c.models.retry,\n  cwd: c.runDir,\n  timeoutMin: 15,\n  requireStatusOk: false,\n  prompt: `${c.preamble}\\n\\n${phase}`,\n} }];\n"
+      }
+    },
+    {
+      "id": "a0e9398d-6d16-56f8-8e7d-2128bb0168ea",
+      "name": "Write PR Body",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        4620,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__CLAUDE_JOB_WORKFLOW_ID__"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "f06661df-baba-5a73-b45e-8d8d53ea0be2",
+      "name": "Job: Open Draft PR",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4840,
+        520
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const c = $('Build Context').first().json;\nconst body = String($('Write PR Body').first().json.result ?? '').trim();\nif (body.length < 50) throw new Error('PR body from Claude is empty or too short — see the Write PR Body node output');\n// Built here, not by Claude, so the PR always links the exact successful run.\nconst t = $('Parse Nonprod Target').first().json.target;\nconst qa = $('Parse Nonprod Target').first().json.qa ?? [];\nlet run = null;\ntry { run = $('Run Nonprod Plan').first().json.result; } catch (_) { /* skipped */ }\nconst qaText = qa.length ? `\\n\\nDeveloper answers (Slack):\\n${qa.map((x) => `- **Q:** ${x.question.replace(/\\n+/g, ' ')}\\n  **A:** ${x.answer.replace(/\\n+/g, ' ')}`).join('\\n')}` : '';\nconst nonprod = t.skip\n  ? `## Nonprod Terraform plan\\nSkipped: the developer answered that this story needs no nonprod plan. ${t.rationale ?? ''}${qaText}`\n  : `## Nonprod Terraform plan\\n` +\n    `:white_check_mark: **[Terraform plan run #${run.runId}](${run.runUrl})** against non-prod environment \\`${t.environment}\\` succeeded on this branch (commit \\`${String(run.headSha).slice(0, 12)}\\`${run.attempt > 1 ? `, attempt ${run.attempt}` : ''}).\\n` +\n    `- Workflow: \\`${t.workflow}\\` (${t.trigger})${Object.keys(t.inputs ?? {}).length ? `, inputs \\`${JSON.stringify(t.inputs)}\\`` : ''}\\n` +\n    `- Jobs: ${(run.jobs ?? []).map((j) => `[${j.name}](${j.url}) ${j.conclusion}`).join(', ')}\\n` +\n    (run.planStepSeen ? '' : `- :warning: no step named \"plan\" was seen in the run; check it really ran \\`terraform plan\\`\\n`) +\n    `- Why this environment: ${t.rationale ?? ''}` +\n    ((t.evidence ?? []).length ? `\\n- Evidence: ${t.evidence.join('; ')}` : '') + qaText;\nconst footer = `\\n\\n---\\n_Draft PR opened by the n8n **Rally Story → Spec-Kit → Draft PR** workflow. Spec, plan, tasks and code were produced by Claude Code running the CEC spec-kit flow with no human input (the nonprod plan target excepted, where Claude could ask over Slack): review the autonomous-clarify assumptions before marking this ready._`;\nreturn [{ json: {\n  kind: 'script',\n  name: 'open-pr',\n  label: 'Open Draft PR',\n  args: [c.runDir, `${c.storyId}: ${c.story.name}`.slice(0, 250), `${body}\\n\\n${nonprod}${footer}`],\n  timeoutMin: 10,\n} }];\n"
+      }
+    },
+    {
+      "id": "2375f147-fe1c-5039-94e3-0d6522d75253",
+      "name": "Open Draft PR",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        4840,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__CLAUDE_JOB_WORKFLOW_ID__"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "fb13fd48-4c02-5d86-b464-3dca5395e606",
+      "name": "Job: Note PR in Rally",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5060,
+        520
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const c = $('Build Context').first().json;\nconst pr = $('Open Draft PR').first().json.result;\nlet plan = null;\ntry { plan = $('Run Nonprod Plan').first().json.result; } catch (_) { /* skipped */ }\nconst ts = new Date().toISOString().replace('T', ' ').slice(0, 16) + 'Z';\nreturn [{ json: {\n  kind: 'script', name: 'rally-append-note', label: 'Note PR in Rally', timeoutMin: 2,\n  args: [c.storyId, `[n8n ${ts}] Draft PR opened by the Rally → Spec-Kit → Draft PR workflow: ${pr.prUrl} (branch ${pr.branch} → ${pr.base})${plan ? `; nonprod Terraform plan passed: ${plan.runUrl}` : '; nonprod plan skipped'}`],\n} }];\n"
+      }
+    },
+    {
+      "id": "150a9656-63da-588f-920b-c9deae34252b",
+      "name": "Note PR in Rally",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        5060,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__CLAUDE_JOB_WORKFLOW_ID__"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "3a4b5c6d-7e8f-4a9b-8c0d-1e2f3a4b5c6d",
+      "name": "Job: Note Cost in Rally",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5280,
+        520
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Roll up cost + tokens across every Claude phase (every run of the looped nonprod phases) and\n// append them to the story Notes as a minimal one-line section, for per-story traceability.\n// Every run's output of a node (the nonprod loop can run a phase several times).\nconst runsOf = (n) => {\n  const out = [];\n  for (let r = 0; r < 50; r++) {\n    let item;\n    try { item = $(n).first(0, r); } catch (_) { break; }\n    if (item) out.push(item.json);\n  }\n  return out;\n};\nconst c = $('Build Context').first().json;\nlet cost = 0, inTok = 0, outTok = 0;\nconst parts = [];\nfor (const n of ['Seed + Specify', 'Clarify', 'Plan', 'Tasks', 'Analyze', 'Implement', 'Discover Nonprod Plan', 'Fix Nonprod Plan', 'Write PR Body']) {\n  const runs = runsOf(n);\n  if (!runs.length) continue;\n  let pc = 0, pt = 0;\n  for (const j of runs) {\n    const u = j.usage || {};\n    const i = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);\n    const o = u.output_tokens || 0;\n    pc += j.costUsd || 0; pt += i + o; inTok += i; outTok += o;\n  }\n  cost += pc;\n  const retried = runs.some((j) => j.retried);\n  parts.push(`${n}${runs.length > 1 ? ` ×${runs.length}` : ''} $${pc.toFixed(2)}/${pt}tok${retried ? ' (retried)' : ''}`);\n}\nconst total = Math.round(cost * 100) / 100;\nconst ts = new Date().toISOString().replace('T', ' ').slice(0, 16) + 'Z';\nconst note = `[n8n ${ts}] AI usage for this run: $${total.toFixed(2)}, tokens ${inTok + outTok} (in ${inTok} / out ${outTok}). By phase — ${parts.join('; ')}.`;\nreturn [{ json: { kind: 'script', name: 'rally-append-note', label: 'Note Cost in Rally', timeoutMin: 2, args: [c.storyId, note] } }];\n"
+      }
+    },
+    {
+      "id": "4b5c6d7e-8f9a-4b0c-9d1e-2f3a4b5c6d7e",
+      "name": "Note Cost in Rally",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        5500,
+        520
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__CLAUDE_JOB_WORKFLOW_ID__"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "264cb8f0-eeb7-5bb6-8882-4fa53df0ee8b",
+      "name": "Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5280,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Every run's output of a node (the nonprod loop can run a phase several times).\nconst runsOf = (n) => {\n  const out = [];\n  for (let r = 0; r < 50; r++) {\n    let item;\n    try { item = $(n).first(0, r); } catch (_) { break; }\n    if (item) out.push(item.json);\n  }\n  return out;\n};\nconst c = $('Build Context').first().json;\nconst pr = $('Open Draft PR').first().json.result;\nconst target = $('Parse Nonprod Target').first().json.target;\nlet plan = null;\ntry { plan = $('Run Nonprod Plan').first().json.result; } catch (_) { /* skipped */ }\nconst tokensOf = (u) => (u ? ((u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.output_tokens || 0)) : 0);\nconst phases = ['Seed + Specify', 'Clarify', 'Plan', 'Tasks', 'Analyze', 'Implement', 'Discover Nonprod Plan', 'Fix Nonprod Plan', 'Write PR Body'].flatMap((name) => runsOf(name).map((j) => (\n  { phase: name, model: (j.models || []).slice(-1)[0] ?? null, retried: j.retried ?? false, costUsd: j.costUsd, tokens: tokensOf(j.usage), sessionId: j.sessionId, startedAt: j.startedAt, finishedAt: j.finishedAt }\n)));\nconst totalCostUsd = Math.round(phases.reduce((s, p) => s + (p.costUsd || 0), 0) * 100) / 100;\nconst totalTokens = phases.reduce((s, p) => s + (p.tokens || 0), 0);\nreturn [{ json: {\n  prUrl: pr.prUrl,\n  nonprodPlan: target.skip ? { skipped: true } : { runUrl: plan?.runUrl, conclusion: plan?.conclusion, environment: target.environment, workflow: target.workflow, inputs: target.inputs },\n  rallyNote: $('Note PR in Rally').first().json.result?.appended ?? null,\n  storyId: c.storyId,\n  story: c.story.name,\n  repo: c.repo,\n  branch: pr.branch,\n  base: pr.base,\n  commits: pr.commits,\n  workspace: c.workspace.path,\n  totalCostUsd,\n  totalTokens,\n  phases,\n  resumeHint: `cd ${c.workspace.path} && claude --resume <sessionId>   # continue any phase interactively`,\n} }];\n"
+      }
+    },
+    {
+      "id": "ee0917af-61b8-5480-8405-0bb6592c2e48",
+      "name": "Build Failure Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        820
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Every phase's error output lands here. Record the failure on the story, ping Slack, then\n// fail the run. Extract Story may not have run yet (a step-1 failure), so fall back for the id.\nlet c;\ntry { c = $('Extract Story').first().json; }\ncatch (_) { try { c = $('Normalize & Validate').first().json; } catch (_2) { c = { storyId: 'unknown' }; } }\nconst storyName = c.story && c.story.name ? `: ${c.story.name}` : '';\nconst repo = c.repo ? ` (${c.repo})` : '';\nconst e = $input.first().json;\nconst raw = typeof e.error === 'string' ? e.error : (e.error?.message ?? e.message ?? JSON.stringify(e));\nconst phase = e.phase || (typeof $prevNode !== 'undefined' && $prevNode.name) || 'unknown step';\nconst reason = String(raw).split('\\n')[0].replace(/\\s*\\[line \\d+\\]\\s*$/, '').slice(0, 400);\nlet workspace = null;\ntry { workspace = $('Prepare Workspace').first().json.result?.path ?? null; } catch (_) { /* failed before it ran */ }\nlet pushed = null;\ntry { pushed = $('Run Nonprod Plan').first().json.result?.ref ?? null; } catch (_) { /* never pushed */ }\nconst ts = new Date().toISOString().replace('T', ' ').slice(0, 16) + 'Z';\nconst note = `[n8n ${ts}] Rally → Spec-Kit → Draft PR run failed at \"${phase}\": ${reason}. No PR was opened.` +\n  (pushed ? ` Branch ${pushed} was pushed for the nonprod plan.` : '') +\n  (workspace ? ` Local workspace: ${workspace}` : '');\nconst esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst slackText = esc([\n  `:x: *${c.storyId}${storyName}*${repo} — the Rally → Spec-Kit → Draft PR run FAILED at *${phase}*.`,\n  reason,\n  'No PR was opened.',\n  pushed ? `Branch ${pushed} was pushed for the nonprod plan.` : '',\n  workspace ? `Local workspace: ${workspace}` : '',\n  `Open the run under Executions in n8n for the full trace.`,\n].filter(Boolean).join('\\n')).slice(0, 2900);\nreturn [{ json: {\n  kind: 'script', name: 'rally-append-note', label: 'Note Failure in Rally', timeoutMin: 2,\n  args: [c.storyId, note],\n  message: `${phase} failed: ${String(raw).slice(0, 3000)}`,\n  slackText,\n} }];\n"
+      }
+    },
+    {
+      "id": "c3d4e5f6-a7b8-4c9d-8e0f-1a2b3c4d5e6f",
+      "name": "Notify Slack: Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        1040
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $json.slackText, blocks: [ { type: 'section', text: { type: 'mrkdwn', text: $json.slackText } } ] }) }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "1b296d99-707f-53cc-b2d4-eb187b92b659",
+      "name": "Note Failure in Rally",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3080,
+        820
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__CLAUDE_JOB_WORKFLOW_ID__"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "31757d4a-7c83-53e5-b249-bf86c9e3ceb7",
+      "name": "Fail Execution",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        3300,
+        820
+      ],
+      "parameters": {
+        "errorMessage": "={{ $('Build Failure Note').first().json.message }}"
+      }
+    },
+    {
+      "id": "538e1d6d-3ee5-5dbc-adbf-77ed4b3d350c",
+      "name": "Job: Discover Nonprod Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        520
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const c = $('Build Context').first().json;\n// qa = every question the developer has answered over Slack so far; Collect Answers and\n// Read Decision carry it back here for the next round.\nconst qa = $input.first().json.qa ?? [];\nconst answered = qa.length\n  ? `\\n\\nThe developer already answered these over Slack. Their answers are authoritative:\\n` +\n    qa.map((x, i) => `Q${i + 1}: ${x.question}\\nA${i + 1}: ${x.answer}`).join('\\n\\n')\n  : '';\nconst phase = `NONPROD PLAN — find the target. Do not change any files.\nBefore the pull request is opened, the pipeline runs this repository's own GitHub Actions\nTerraform plan against a NON-PRODUCTION environment, from branch ${c.workspace.branch}. Work out\nwhich workflow and inputs do that. The pipeline runs it with nonprod-plan.sh; you only decide.\n\n1. Read .github/workflows/*.yml and find what runs \\`terraform plan\\`: directly, through a reusable\n   workflow (\\`uses:\\`; read org ones with gh api repos/<org>/<repo>/contents/<path>), a composite\n   action or a Makefile target.\n2. Work out how it is triggered: workflow_dispatch (inputs, types, options, defaults, required) or\n   push to branches that ${c.workspace.branch} matches. workflow_dispatch only works when the\n   workflow file also exists on the repository's default branch.\n3. Work out the right non-production environment from \\`environment:\\` keys, env / tfvars / backend\n   directories (envs/, environments/, *.tfvars), gh api repos/{owner}/{repo}/environments, the\n   inputs of past successful nonprod runs (gh run list --workflow <file> --json ..., then\n   gh run view <id>), and cec-sdlc:cec-knowledge for this workload's environments and accounts.\n   Prefer the environment the team itself uses for pre-merge plans.\n4. The inputs must run PLAN ONLY. Never choose apply or destroy. If the workflow cannot plan\n   without also applying, ask.\n5. Unlike the other phases, this one CAN ask the developer, but only through the \"questions\"\n   array below; they answer over Slack and this phase runs again with their answers. Ask when it\n   matters instead of guessing: more than one plausible non-prod environment, a required input\n   you cannot ground, or no Terraform plan workflow at all. Give options and your recommendation.\nNever run gh workflow run, gh run rerun, or gh api with a write method.${answered}\n\nEnd your reply with a \\`\\`\\`json fenced block in exactly this shape, then the STATUS line:\n{\n  \"workflow\": \"<file name in .github/workflows, e.g. terraform-plan.yml>\",\n  \"trigger\": \"workflow_dispatch or push\",\n  \"environment\": \"<non-prod environment name>\",\n  \"inputs\": { \"<input name>\": \"<string value>\" },\n  \"planOnly\": true,\n  \"skip\": false,\n  \"rationale\": \"<why this workflow, environment and inputs>\",\n  \"evidence\": [\"<file:line or run URL>\"],\n  \"questions\": [ { \"question\": \"...\", \"options\": [\"...\"], \"recommendation\": \"...\" } ]\n}\n\"inputs\" is {} for push. \"questions\" is [] when you are confident; when it is not empty, fill\nthe other fields with your best current guess. Set \"skip\": true only if the developer\nexplicitly answered that this story needs no nonprod plan.`;\nreturn [{ json: {\n  kind: 'claude',\n  label: 'Discover Nonprod Plan',\n  model: c.models.dev,\n  retryModel: c.models.retry,\n  cwd: c.runDir,\n  timeoutMin: 30,\n  requireStatusOk: true,\n  prompt: `${c.preamble}\\n\\n${phase}\\n${c.statusRule}`,\n  qa,\n} }];\n"
+      }
+    },
+    {
+      "id": "08db5321-7e16-503c-ae7d-a6445593d430",
+      "name": "Discover Nonprod Plan",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3300,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__CLAUDE_JOB_WORKFLOW_ID__"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "3bf53196-0960-50d8-91de-4a15ca3b076b",
+      "name": "Parse Nonprod Target",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Last ```json fenced block in a Claude reply, parsed.\nconst lastJson = (text, phase) => {\n  const blocks = [...String(text ?? '').matchAll(/```json\\s*([\\s\\S]*?)```/g)];\n  if (!blocks.length) throw new Error(`${phase} did not end with a \\`\\`\\`json block`);\n  try { return JSON.parse(blocks[blocks.length - 1][1]); } catch (e) { throw new Error(`${phase} returned invalid JSON: ${e.message}`); }\n};\nconst qa = $('Job: Discover Nonprod Plan').first().json.qa ?? [];\nconst t = lastJson($input.first().json.result, 'Discover Nonprod Plan');\nconst questions = (Array.isArray(t.questions) ? t.questions : []).filter((q) => q && String(q.question ?? '').trim());\n\nif (questions.length) {\n  if (qa.length >= 5) {\n    throw new Error(`still ${questions.length} open nonprod-plan question(s) after ${qa.length} developer answers: ${questions.map((q) => q.question).join(' | ')}`);\n  }\n  return [{ json: { needsInput: true, skip: false, questions, qa, target: t } }];\n}\nif (t.skip === true) return [{ json: { needsInput: false, skip: true, qa, target: t } }];\n\n// Guardrails: nonprod-plan.sh re-checks the first two, but fail here with a clear message.\nconst inputs = t.inputs ?? {};\nconst env = String(t.environment ?? '');\nif (!/^[\\w.-]+\\.ya?ml$/.test(String(t.workflow ?? ''))) throw new Error(`nonprod target has no valid workflow file name: ${JSON.stringify(t.workflow)}`);\nif (!['workflow_dispatch', 'push'].includes(t.trigger)) throw new Error(`nonprod target has an unsupported trigger: ${JSON.stringify(t.trigger)}`);\nif (typeof inputs !== 'object' || Array.isArray(inputs) || !Object.values(inputs).every((v) => typeof v === 'string')) {\n  throw new Error(`nonprod target inputs must be an object of strings: ${JSON.stringify(inputs)}`);\n}\nif (t.planOnly !== true || Object.values(inputs).some((v) => /\\b(apply|destroy)\\b/i.test(v))) {\n  throw new Error(`refusing a nonprod target that is not plan-only: ${JSON.stringify(inputs)}`);\n}\nif (/(^|[^a-z])(prod|production|prd)([^a-z]|$)/i.test(env) && !/(non|pre)-?prod/i.test(env)) {\n  throw new Error(`refusing: \"${env}\" looks like a production environment`);\n}\nreturn [{ json: { needsInput: false, skip: false, qa, target: { ...t, inputs } } }];\n"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "18620a21-4096-5da4-ba09-de12a73ec5bc",
+      "name": "Needs Developer Input?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3740,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3c7dd96a-9780-5659-9f7f-91d522205627",
+              "leftValue": "={{ $json.needsInput }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "daa28979-0760-597e-b15a-d4483700f497",
+      "name": "Build Slack Questions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3960,
+        -120
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst c = $('Build Context').first().json;\nconst p = $input.first().json;\nconst lines = p.questions.map((q, i) => [\n  `${i + 1}. ${q.question}`,\n  (q.options ?? []).length ? `   options: ${q.options.join(' / ')}` : '',\n  q.recommendation ? `   Claude recommends: ${q.recommendation}` : '',\n].filter(Boolean).join('\\n'));\nconst slackText = esc([\n  `*${c.storyId}: ${c.story.name}* needs your input before its nonprod Terraform plan runs.`,\n  `Repo ${c.repo}, branch ${c.workspace.branch}.`,\n  p.target?.rationale ? `_Claude so far:_ ${p.target.rationale}` : '',\n  '',\n  ...lines,\n].filter((l) => l !== null).join('\\n')).slice(0, 2900);\nconst formHtml = `<ol>${p.questions.map((q) => `<li><p>${esc(q.question)}</p>` +\n  ((q.options ?? []).length ? `<p>Options: ${q.options.map(esc).join(' / ')}</p>` : '') +\n  (q.recommendation ? `<p><em>Claude recommends: ${esc(q.recommendation)}</em></p>` : '') + '</li>').join('')}</ol>`;\nreturn [{ json: { ...p, slackText, formHtml, questionText: lines.join('\\n') } }];\n"
+      }
+    },
+    {
+      "id": "2eb56e71-7e3c-5b15-b463-21e98abcb3d3",
+      "name": "Ask on Slack: Questions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4180,
+        -120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $json.slackText + '\\n\\n<' + $execution.resumeFormUrl + '|Answer in n8n> — the run is paused until you do (24h limit).', blocks: [ { type: 'section', text: { type: 'mrkdwn', text: $json.slackText } }, { type: 'actions', elements: [ { type: 'button', style: 'primary', text: { type: 'plain_text', text: 'Answer in n8n' }, url: $execution.resumeFormUrl } ] }, { type: 'context', elements: [ { type: 'mrkdwn', text: 'The n8n run is paused until you submit the form (24h limit). Link works on the machine running the sandbox.' } ] } ] }) }}",
+        "options": {}
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "e57b9f39-46b8-59c5-a864-ad17f67b69b4",
+      "name": "Wait for Answers",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4400,
+        -120
+      ],
+      "webhookId": "562603e0-a95e-5eaa-81f5-726314d9b92e",
+      "parameters": {
+        "resume": "form",
+        "formTitle": "={{ $('Build Context').first().json.storyId }}: nonprod plan questions",
+        "formDescription": "Answer each numbered question. The paused n8n run continues when you submit.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Questions",
+              "fieldType": "html",
+              "html": "={{ $('Build Slack Questions').first().json.formHtml }}"
+            },
+            {
+              "fieldLabel": "Answers",
+              "fieldType": "textarea",
+              "placeholder": "1. ...\n2. ...",
+              "requiredField": true
+            }
+          ]
+        },
+        "limitWaitTime": true,
+        "limitType": "afterTimeInterval",
+        "resumeAmount": 24,
+        "resumeUnit": "hours",
+        "options": {}
+      }
+    },
+    {
+      "id": "0c4b318e-9edc-573f-9dc1-1481d4aad695",
+      "name": "Collect Answers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4620,
+        -120
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Timed out = the Wait node passed its input through without a form submission.\nconst answers = String($input.first().json.Answers ?? '').trim();\nconst p = $('Build Slack Questions').first().json;\nif (!answers) throw new Error('no answer to the nonprod plan questions on Slack within 24h');\nreturn [{ json: { qa: [...(p.qa ?? []), { question: p.questionText, answer: answers }] } }];\n"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "6e46d81b-22fa-5f23-8aaa-b698d7a5a832",
+      "name": "Skip Nonprod Plan?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3960,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2215eadd-10fb-5b06-9750-e45ca572cbea",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b0389622-865f-51cb-829c-069773fbc15a",
+      "name": "Job: Run Nonprod Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4180,
+        520
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const c = $('Build Context').first().json;\nconst t = $('Parse Nonprod Target').first().json.target;\nreturn [{ json: {\n  kind: 'script',\n  name: 'nonprod-plan',\n  label: 'Run Nonprod Plan',\n  args: [c.runDir, t.workflow, t.trigger, JSON.stringify(t.inputs ?? {}), '45'],\n  timeoutMin: 60,\n} }];\n"
+      }
+    },
+    {
+      "id": "be71624a-e892-5f36-bcbd-bf04fb018b5b",
+      "name": "Run Nonprod Plan",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        4180,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__CLAUDE_JOB_WORKFLOW_ID__"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "3813f931-b920-5ded-ba4e-dd63f0973248",
+      "name": "Plan Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4400,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "627c8ac0-2666-57a1-8580-904cb60bd6fa",
+              "leftValue": "={{ $json.result?.conclusion }}",
+              "rightValue": "success",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "612e734f-c483-5b95-9c29-03e7fd1a5b7d",
+      "name": "Plan Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        1040
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Reached from a completed-but-unsuccessful run, or from the script's error output (dispatch\n// refused, run never appeared, still running at the deadline). Claude gets MAX_AUTO_FIX tries on\n// its own; after that every failure goes to the developer on Slack.\nconst MAX_AUTO_FIX = 2;\nconst j = $input.first().json;\nconst run = j.result && typeof j.result === 'object' ? j.result : null;\nconst raw = typeof j.error === 'string' ? j.error : (j.error?.message ?? j.message ?? '');\nconst reason = run\n  ? `run ${run.runUrl} ended \"${run.conclusion}\" (${(run.jobs ?? []).filter((x) => x.conclusion !== 'success').map((x) => `${x.name}: ${x.conclusion}`).join(', ') || 'no failed jobs listed'})`\n  : `nonprod-plan.sh failed: ${String(raw).split('\\n')[0].slice(0, 600)}`;\nreturn [{ json: { run, reason, detail: String(raw).slice(0, 3000), attempt: $runIndex + 1, autoFix: $runIndex < MAX_AUTO_FIX, guidance: '' } }];\n"
+      }
+    },
+    {
+      "id": "15adb415-2e74-5abb-a31b-99ea25b33bf6",
+      "name": "Auto-Fix?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4620,
+        1040
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "94057078-67cc-5ccb-b8ce-cc87dff59a56",
+              "leftValue": "={{ $json.autoFix }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "fe0e126c-ea46-5838-955d-357a9d22666f",
+      "name": "Job: Fix Nonprod Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4840,
+        1260
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const c = $('Build Context').first().json;\nconst guidance = String($input.first().json.guidance ?? '').trim(); // set when the developer chose \"Fix\"\nconst f = $('Plan Failed').first().json;\nconst t = $('Parse Nonprod Target').first().json.target;\nconst phase = `NONPROD PLAN — fix the failure.\nThe pipeline ran the nonprod Terraform plan for ${c.workspace.branch} and it did not succeed:\n${f.reason}\nWorkflow ${t.workflow} (${t.trigger}), environment ${t.environment}, inputs ${JSON.stringify(t.inputs ?? {})}.\n${f.run ? `Read the failed logs: gh run view ${f.run.runId} --log-failed (and gh run view ${f.run.runId} --json jobs).` : `Script output:\\n${f.detail}`}\n\n1. Find the root cause.\n2. If it is caused by code or Terraform on this branch, fix it (terraform fmt / validate where\n   relevant) and commit with message \"${c.storyId}: fix nonprod terraform plan\". Do not push;\n   the pipeline pushes and re-runs the plan.\n3. If it cannot be fixed from this branch (credentials / OIDC, IAM permissions, state lock,\n   environment approval, runner, a wrong workflow input), change nothing and say what the\n   developer has to do.\n${guidance ? `\\nThe developer sent this guidance over Slack. Follow it:\\n${guidance}\\n` : ''}\nEnd your reply with a \\`\\`\\`json fenced block {\"fixed\": true or false, \"cause\": \"<one line>\", \"changes\": \"<what you changed, or empty>\"}, then the STATUS line.`;\nreturn [{ json: {\n  kind: 'claude',\n  label: 'Fix Nonprod Plan',\n  model: c.models.dev,\n  retryModel: c.models.retry,\n  cwd: c.runDir,\n  timeoutMin: 45,\n  requireStatusOk: true,\n  prompt: `${c.preamble}\\n\\n${phase}\\n${c.statusRule}`,\n} }];\n"
+      }
+    },
+    {
+      "id": "98ce55f9-18f7-5e46-b716-e2bad04816dd",
+      "name": "Fix Nonprod Plan",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        4840,
+        1040
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__CLAUDE_JOB_WORKFLOW_ID__"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "44fdb93b-0344-54d7-991c-770af19e7dc6",
+      "name": "Parse Fix",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5060,
+        1040
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Last ```json fenced block in a Claude reply, parsed.\nconst lastJson = (text, phase) => {\n  const blocks = [...String(text ?? '').matchAll(/```json\\s*([\\s\\S]*?)```/g)];\n  if (!blocks.length) throw new Error(`${phase} did not end with a \\`\\`\\`json block`);\n  try { return JSON.parse(blocks[blocks.length - 1][1]); } catch (e) { throw new Error(`${phase} returned invalid JSON: ${e.message}`); }\n};\nconst r = lastJson($input.first().json.result, 'Fix Nonprod Plan');\nreturn [{ json: { fixed: r.fixed === true, cause: String(r.cause ?? ''), changes: String(r.changes ?? '') } }];\n"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "a1a4da78-1434-5e0b-87eb-1772610e36ef",
+      "name": "Fixed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5280,
+        1040
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f8ecda6a-ced6-53c5-8270-f2804858211e",
+              "leftValue": "={{ $json.fixed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e2ec0df2-95e3-5901-9301-e42b17c11be4",
+      "name": "Build Slack Plan Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4840,
+        1480
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst c = $('Build Context').first().json;\nconst f = $('Plan Failed').first().json;\nconst t = $('Parse Nonprod Target').first().json.target;\n// Present when Claude looked at this failure and could not fix it from the branch.\nconst fix = $input.first().json.fixed === false ? $input.first().json : null;\nconst slackText = esc([\n  `*${c.storyId}: ${c.story.name}*: the nonprod Terraform plan failed (attempt ${f.attempt}). No PR has been opened.`,\n  `Repo ${c.repo}, branch ${c.workspace.branch}, workflow ${t.workflow}, environment ${t.environment}.`,\n  f.reason,\n  fix ? `_Claude's diagnosis:_ ${fix.cause}` : '',\n  '',\n  'Open the form to choose: fix the code with your guidance, re-run the plan unchanged, pick a different workflow / environment, or abort.',\n].filter(Boolean).join('\\n')).slice(0, 2900);\nreturn [{ json: { slackText } }];\n"
+      }
+    },
+    {
+      "id": "7c272256-bd15-598b-8918-af8499156b59",
+      "name": "Ask on Slack: Plan Failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5060,
+        1480
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $json.slackText + '\\n\\n<' + $execution.resumeFormUrl + '|Answer in n8n> — the run is paused until you do (24h limit).', blocks: [ { type: 'section', text: { type: 'mrkdwn', text: $json.slackText } }, { type: 'actions', elements: [ { type: 'button', style: 'primary', text: { type: 'plain_text', text: 'Answer in n8n' }, url: $execution.resumeFormUrl } ] }, { type: 'context', elements: [ { type: 'mrkdwn', text: 'The n8n run is paused until you submit the form (24h limit). Link works on the machine running the sandbox.' } ] } ] }) }}",
+        "options": {}
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "8ba652df-5624-5dee-9b6c-4b4d438eeb0d",
+      "name": "Wait for Plan Decision",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        5280,
+        1480
+      ],
+      "webhookId": "d97b2a2d-de61-5459-bf02-93fb3967267f",
+      "parameters": {
+        "resume": "form",
+        "formTitle": "={{ $('Build Context').first().json.storyId }}: nonprod plan failed",
+        "formDescription": "={{ $('Plan Failed').first().json.reason }}",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Decision",
+              "fieldType": "dropdown",
+              "requiredField": true,
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Fix the code (use my guidance)"
+                  },
+                  {
+                    "option": "Re-run the plan unchanged"
+                  },
+                  {
+                    "option": "Use a different workflow / environment / inputs (use my guidance)"
+                  },
+                  {
+                    "option": "Abort (no PR)"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Guidance",
+              "fieldType": "textarea",
+              "placeholder": "What Claude should change, or which environment / inputs to use"
+            }
+          ]
+        },
+        "limitWaitTime": true,
+        "limitType": "afterTimeInterval",
+        "resumeAmount": 24,
+        "resumeUnit": "hours",
+        "options": {}
+      }
+    },
+    {
+      "id": "fa37433c-cedd-520e-93a3-b1d0fc7abcef",
+      "name": "Read Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5500,
+        1480
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const form = $input.first().json;\nconst d = String(form.Decision ?? '');\nconst guidance = String(form.Guidance ?? '').trim();\nconst f = $('Plan Failed').first().json;\nconst t = $('Parse Nonprod Target').first().json.target;\nconst decision = d.startsWith('Fix') ? 'fix' : d.startsWith('Re-run') ? 'rerun' : d.startsWith('Use a different') ? 'rediscover' : 'abort';\nif (decision === 'abort') {\n  return [{ json: { decision, phase: 'Nonprod Plan', error: d ? `developer aborted after the nonprod plan failed — ${f.reason}` : `no decision on the failed nonprod plan within 24h — ${f.reason}` } }];\n}\nconst qa = decision === 'rediscover'\n  ? [...($('Parse Nonprod Target').first().json.qa ?? []), {\n      question: `The plan with workflow ${t.workflow}, environment ${t.environment}, inputs ${JSON.stringify(t.inputs ?? {})} failed (${f.reason}). What should be used instead?`,\n      answer: guidance || '(no guidance given — find a different target)',\n    }]\n  : undefined;\nreturn [{ json: { decision, guidance, qa } }];\n"
+      }
+    },
+    {
+      "id": "af620782-cb65-5e87-90ff-10afc9a5e682",
+      "name": "Fix Requested?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5720,
+        1480
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "dc8d5967-6338-50e4-a2ba-b69c8d8a82db",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "fix",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5f0647a1-bf22-580c-9812-0cdcd47117f3",
+      "name": "Re-run Requested?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5940,
+        1580
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2e26210b-d03d-5421-80f6-66f3f895f4ab",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "rerun",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0cf179db-bad4-5f48-b5db-d7fa3e6524b7",
+      "name": "Re-discover Requested?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6160,
+        1680
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f44f9034-8367-51a1-a394-68f1ce2cf9c4",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "rediscover",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Rally Story Form": {
+      "main": [
+        [
+          {
+            "node": "Form Ack — Started",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Form Ack — Started": {
+      "main": [
+        [
+          {
+            "node": "From Form",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "From Form": {
+      "main": [
+        [
+          {
+            "node": "Normalize & Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Webhook Token OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Token OK?": {
+      "main": [
+        [
+          {
+            "node": "From Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "From Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize & Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize & Validate": {
+      "main": [
+        [
+          {
+            "node": "Job: Fetch Rally Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job: Fetch Rally Story": {
+      "main": [
+        [
+          {
+            "node": "Fetch Rally Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Rally Story": {
+      "main": [
+        [
+          {
+            "node": "Extract Story",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failure Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Story": {
+      "main": [
+        [
+          {
+            "node": "Job: Prepare Workspace",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job: Prepare Workspace": {
+      "main": [
+        [
+          {
+            "node": "Prepare Workspace",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Workspace": {
+      "main": [
+        [
+          {
+            "node": "Build Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failure Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context": {
+      "main": [
+        [
+          {
+            "node": "Job: Seed + Specify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job: Seed + Specify": {
+      "main": [
+        [
+          {
+            "node": "Seed + Specify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Seed + Specify": {
+      "main": [
+        [
+          {
+            "node": "Job: Clarify",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failure Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job: Clarify": {
+      "main": [
+        [
+          {
+            "node": "Clarify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clarify": {
+      "main": [
+        [
+          {
+            "node": "Job: Plan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failure Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job: Plan": {
+      "main": [
+        [
+          {
+            "node": "Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan": {
+      "main": [
+        [
+          {
+            "node": "Job: Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failure Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job: Tasks": {
+      "main": [
+        [
+          {
+            "node": "Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tasks": {
+      "main": [
+        [
+          {
+            "node": "Job: Analyze",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failure Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job: Analyze": {
+      "main": [
+        [
+          {
+            "node": "Analyze",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze": {
+      "main": [
+        [
+          {
+            "node": "Job: Implement",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failure Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job: Implement": {
+      "main": [
+        [
+          {
+            "node": "Implement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Implement": {
+      "main": [
+        [
+          {
+            "node": "Job: Discover Nonprod Plan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failure Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job: Write PR Body": {
+      "main": [
+        [
+          {
+            "node": "Write PR Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write PR Body": {
+      "main": [
+        [
+          {
+            "node": "Job: Open Draft PR",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failure Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job: Open Draft PR": {
+      "main": [
+        [
+          {
+            "node": "Open Draft PR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Open Draft PR": {
+      "main": [
+        [
+          {
+            "node": "Job: Note PR in Rally",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failure Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job: Note PR in Rally": {
+      "main": [
+        [
+          {
+            "node": "Note PR in Rally",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Note PR in Rally": {
+      "main": [
+        [
+          {
+            "node": "Job: Note Cost in Rally",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job: Note Cost in Rally": {
+      "main": [
+        [
+          {
+            "node": "Note Cost in Rally",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Note Cost in Rally": {
+      "main": [
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Failure Note": {
+      "main": [
+        [
+          {
+            "node": "Notify Slack: Failure",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Note Failure in Rally",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Note Failure in Rally": {
+      "main": [
+        [
+          {
+            "node": "Fail Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job: Discover Nonprod Plan": {
+      "main": [
+        [
+          {
+            "node": "Discover Nonprod Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discover Nonprod Plan": {
+      "main": [
+        [
+          {
+            "node": "Parse Nonprod Target",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failure Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Nonprod Target": {
+      "main": [
+        [
+          {
+            "node": "Needs Developer Input?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failure Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Developer Input?": {
+      "main": [
+        [
+          {
+            "node": "Build Slack Questions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Nonprod Plan?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Slack Questions": {
+      "main": [
+        [
+          {
+            "node": "Ask on Slack: Questions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask on Slack: Questions": {
+      "main": [
+        [
+          {
+            "node": "Wait for Answers",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failure Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Answers": {
+      "main": [
+        [
+          {
+            "node": "Form Ack — Answers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Form Ack — Answers": {
+      "main": [
+        [
+          {
+            "node": "Collect Answers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Answers": {
+      "main": [
+        [
+          {
+            "node": "Job: Discover Nonprod Plan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failure Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Nonprod Plan?": {
+      "main": [
+        [
+          {
+            "node": "Job: Write PR Body",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Job: Run Nonprod Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job: Run Nonprod Plan": {
+      "main": [
+        [
+          {
+            "node": "Run Nonprod Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Nonprod Plan": {
+      "main": [
+        [
+          {
+            "node": "Plan Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Plan Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Passed?": {
+      "main": [
+        [
+          {
+            "node": "Job: Write PR Body",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Plan Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Failed": {
+      "main": [
+        [
+          {
+            "node": "Auto-Fix?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto-Fix?": {
+      "main": [
+        [
+          {
+            "node": "Job: Fix Nonprod Plan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Slack Plan Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job: Fix Nonprod Plan": {
+      "main": [
+        [
+          {
+            "node": "Fix Nonprod Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fix Nonprod Plan": {
+      "main": [
+        [
+          {
+            "node": "Parse Fix",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failure Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Fix": {
+      "main": [
+        [
+          {
+            "node": "Fixed?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failure Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fixed?": {
+      "main": [
+        [
+          {
+            "node": "Job: Run Nonprod Plan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Slack Plan Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Slack Plan Failure": {
+      "main": [
+        [
+          {
+            "node": "Ask on Slack: Plan Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask on Slack: Plan Failed": {
+      "main": [
+        [
+          {
+            "node": "Wait for Plan Decision",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failure Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Plan Decision": {
+      "main": [
+        [
+          {
+            "node": "Form Ack — Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Form Ack — Decision": {
+      "main": [
+        [
+          {
+            "node": "Read Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Decision": {
+      "main": [
+        [
+          {
+            "node": "Fix Requested?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fix Requested?": {
+      "main": [
+        [
+          {
+            "node": "Job: Fix Nonprod Plan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Re-run Requested?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Re-run Requested?": {
+      "main": [
+        [
+          {
+            "node": "Job: Run Nonprod Plan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Re-discover Requested?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Re-discover Requested?": {
+      "main": [
+        [
+          {
+            "node": "Job: Discover Nonprod Plan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failure Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

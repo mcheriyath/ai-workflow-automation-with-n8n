@@ -1,0 +1,8 @@
+{
+	auto_https off
+}
+
+{$SANDBOX_HOST}:5678 {
+	tls /certs/{$SANDBOX_HOST}.pem /certs/{$SANDBOX_HOST}-key.pem
+	reverse_proxy n8n:5678
+}

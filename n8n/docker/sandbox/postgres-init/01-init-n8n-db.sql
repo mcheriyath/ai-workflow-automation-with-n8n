@@ -1,0 +1,8 @@
+-- The official postgres image already creates the role/database named by
+-- POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB (set in compose/docker-compose.yml from
+-- .env.sandbox) on first init of an empty volume — no CREATE ROLE/DATABASE needed here.
+--
+-- This file exists as the place to add any n8n-adjacent extension or seed data later
+-- (e.g. a second schema/database for a future local vector-store sandbox) without having
+-- to introduce a new mount point. Runs once, only on a fresh volume — see
+-- https://github.com/docker-library/docs/blob/master/postgres/README.md#initialization-scripts

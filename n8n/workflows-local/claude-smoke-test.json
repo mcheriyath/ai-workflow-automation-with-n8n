@@ -1,0 +1,138 @@
+{
+  "name": "Claude Bridge — Smoke Test",
+  "nodes": [
+    {
+      "id": "e74fe111-22cd-5806-b6b3-61c769cc1e71",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "55a1ccba-f6a8-588a-b38b-d24f78ab2be6",
+      "name": "Bridge Health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.CLAUDE_BRIDGE_URL }}/health",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CLAUDE_BRIDGE_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "736893ee-4b44-5688-b76f-ffbb60e88a20",
+      "name": "Job: Ping Claude",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "return [{ json: {\n  kind: 'claude',\n  label: 'smoke test',\n  prompt: 'Reply with exactly: PONG',\n  cwd: 'smoke',\n  timeoutMin: 3,\n  model: 'haiku',\n} }];\n"
+      }
+    },
+    {
+      "id": "5705bef4-0660-5148-bede-f1e450ef7a25",
+      "name": "Run Claude Job",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "__CLAUDE_JOB_WORKFLOW_ID__"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "45f3cd3b-5912-54d2-9fb3-9ba6683510cb",
+      "name": "Assert PONG",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const health = $('Bridge Health').first().json;\nconst job = $input.first().json;\nconst reply = String(job.result ?? '').trim();\nif (reply !== 'PONG') throw new Error(`expected \"PONG\" from Claude, got: ${JSON.stringify(reply).slice(0, 500)}`);\nreturn [{ json: {\n  ok: true,\n  claudeVersion: health.claudeVersion,\n  permissionMode: health.permissionMode,\n  reply,\n  costUsd: job.costUsd,\n  sessionId: job.sessionId,\n} }];\n"
+      }
+    }
+  ],
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Bridge Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bridge Health": {
+      "main": [
+        [
+          {
+            "node": "Job: Ping Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job: Ping Claude": {
+      "main": [
+        [
+          {
+            "node": "Run Claude Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Claude Job": {
+      "main": [
+        [
+          {
+            "node": "Assert PONG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

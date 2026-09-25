@@ -1,0 +1,92 @@
+{
+  "name": "hello-claude",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger",
+      "name": "When clicked",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.CLAUDE_BRIDGE_URL}}/jobs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "=Bearer {{$env.CLAUDE_BRIDGE_TOKEN}}"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"kind\": \"claude\",\n  \"prompt\": \"Say hello in one sentence.\",\n  \"cwd\": \"hello\",\n  \"timeoutMin\": 5\n}",
+        "options": {}
+      },
+      "id": "submit",
+      "name": "Submit job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "id": "wait",
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.CLAUDE_BRIDGE_URL}}/jobs/{{$node[\"Submit job\"].json.jobId}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "=Bearer {{$env.CLAUDE_BRIDGE_TOKEN}}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "poll",
+      "name": "Poll job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+          "conditions": [
+            {
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "running",
+              "operator": {"type": "string", "operation": "equals"}
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if_running",
+      "name": "Still running?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1080, 300]
+    }
+  ],
+  "connections": {
+    "When clicked": {"main": [[{"node": "Submit job", "type": "main", "index": 0}]]},
+    "Submit job": {"main": [[{"node": "Wait", "type": "main", "index": 0}]]},
+    "Wait": {"main": [[{"node": "Poll job", "type": "main", "index": 0}]]},
+    "Poll job": {"main": [[{"node": "Still running?", "type": "main", "index": 0}]]},
+    "Still running?": {"main": [[{"node": "Wait", "type": "main", "index": 0}], []]}
+  },
+  "settings": {"executionOrder": "v1"}
+}

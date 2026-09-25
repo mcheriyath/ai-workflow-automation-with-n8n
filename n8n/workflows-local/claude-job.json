@@ -1,0 +1,461 @@
+{
+  "name": "Claude Bridge — Run Job",
+  "nodes": [
+    {
+      "id": "b020c50d-e822-5413-8ba9-543d476bcc52",
+      "name": "When Called by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "7bee31ca-efc4-53ce-bbf0-c08a17fa2b6e",
+      "name": "Build Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Input item (passthrough from the caller) is a bridge job spec:\n//   { kind: 'claude', prompt, cwd, timeoutMin?, model?, retryModel?, requireStatusOk?, label? }\n//   { kind: 'script', name, args, timeoutMin? }\n// A claude spec may carry retryModel: if the first attempt fails, this sub-workflow runs ONE\n// more attempt on that model (the failover/stronger model) with the failure appended as context.\nconst spec = $input.first().json;\nif (spec.kind !== 'claude' && spec.kind !== 'script') {\n  throw new Error(`job spec needs kind \"claude\" or \"script\", got ${JSON.stringify(spec.kind)}`);\n}\nconst request = spec.kind === 'claude'\n  ? { kind: 'claude', prompt: spec.prompt, cwd: spec.cwd, timeoutMin: spec.timeoutMin ?? 30, ...(spec.model ? { model: spec.model } : {}) }\n  : { kind: 'script', name: spec.name, args: spec.args ?? [], timeoutMin: spec.timeoutMin ?? 10 };\nreturn [{ json: { request } }];\n"
+      }
+    },
+    {
+      "id": "e0f3d0b0-6d48-5fdb-882a-cc3ffeb7d4b9",
+      "name": "Submit Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CLAUDE_BRIDGE_URL }}/jobs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CLAUDE_BRIDGE_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "b1506abe-907a-534b-8639-93e9450905db",
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "webhookId": "f8cb38ca-9dc4-596b-835a-a4e4891ce048"
+    },
+    {
+      "id": "6a7dfa02-8349-551c-8033-2a698b3866b3",
+      "name": "Get Job Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.CLAUDE_BRIDGE_URL }}/jobs/{{ $('Submit Job').first().json.jobId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CLAUDE_BRIDGE_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b373f855-7407-5e8d-b755-507ef09d6c05",
+      "name": "Still Running?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8efc45c8-a602-58a4-be4c-9ccb44802fd2",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "running",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1f70546d-90ad-5e9a-b24f-2972a12e4479",
+      "name": "Assess Attempt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// First attempt landed. Decide: succeeded (pass through), failed-but-retryable (emit a retry\n// request), or failed-and-terminal (throw — the caller's error branch handles it).\nconst spec = $('When Called by Another Workflow').first().json;\nconst job = $input.first().json;\nconst label = spec.label || (spec.kind === 'script' ? spec.name : 'claude job');\n\nfunction evalJob(j) {\n  if (j.status !== 'succeeded') {\n    const lines = String(j.logTail ?? '').split('\\n').map((l) => l.trim()).filter(Boolean);\n    const cause = j.error\n      || [...lines].reverse().find((l) => /FATAL|error|fatal:|denied|not found/i.test(l))\n      || lines.pop() || `job ended \"${j.status}\"`;\n    return { ok: false, reason: (j.status === 'timeout' ? `timed out after ${spec.timeoutMin ?? '?'} min — ` : '') + cause };\n  }\n  if (spec.kind === 'claude') {\n    const text = String(j.result ?? '');\n    const lastLine = text.trim().split('\\n').pop().replace(/[*`_]/g, '').trim();\n    const blocked = lastLine.match(/^STATUS:\\s*BLOCKED:?\\s*(.*)$/);\n    if (blocked) return { ok: false, reason: `Claude reported BLOCKED — ${blocked[1].trim() || 'no reason given'}` };\n    if (spec.requireStatusOk && !/^STATUS:\\s*OK$/.test(lastLine)) {\n      return { ok: false, reason: 'Claude finished without a \"STATUS: OK\" line — treating as incomplete' };\n    }\n  }\n  return { ok: true };\n}\n\nconst v = evalJob(job);\n\nif (v.ok) {\n  return [{ json: {\n    _retry: false,\n    jobId: job.id, status: job.status, result: job.result, sessionId: job.sessionId,\n    costUsd: job.costUsd, usage: job.usage ?? null, modelUsage: job.modelUsage ?? null,\n    cwd: job.cwd, startedAt: job.createdAt, finishedAt: job.finishedAt,\n    retried: false, models: [spec.model || '(default)'],\n  } }];\n}\n\n// Failed. Retry only claude jobs that carry a retryModel; everything else is terminal.\nif (spec.kind !== 'claude' || !spec.retryModel) {\n  throw new Error(\n    `${label}: ${v.reason}\\n\\nbridge job ${job.id} ended \"${job.status}\"` +\n    (job.result ? `\\n\\nresult:\\n${String(typeof job.result === 'string' ? job.result : JSON.stringify(job.result)).slice(-2000)}` : '') +\n    (job.logTail ? `\\n\\nstderr tail:\\n${job.logTail.slice(-2000)}` : '') +\n    `\\n\\nfull logs: n8n/host-bridge/.jobs/${job.id}/`\n  );\n}\n\nconst failCtx = `\\n\\n---\\nRETRY CONTEXT — a previous attempt using model ${spec.model || '(default)'} did not complete this phase:\\n${v.reason}\\nStart clean, diagnose the cause above, and finish the phase correctly.`;\nreturn [{ json: {\n  _retry: true,\n  retryRequest: { kind: 'claude', prompt: String(spec.prompt) + failCtx, cwd: spec.cwd, timeoutMin: spec.timeoutMin ?? 30, model: spec.retryModel },\n  attempt1: { jobId: job.id, costUsd: job.costUsd || 0, usage: job.usage || null, reason: v.reason },\n} }];\n"
+      }
+    },
+    {
+      "id": "d5c1a0e2-4b3f-5a6c-9d8e-1f2a3b4c5d6e",
+      "name": "Retry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b7c8d9e0-1a2b-3c4d-5e6f-7a8b9c0d1e2f",
+              "leftValue": "={{ $json._retry }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f1e2d3c4-b5a6-4978-8b6c-5d4e3f2a1b09",
+      "name": "Return Result",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+      "name": "Submit Retry",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        420
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CLAUDE_BRIDGE_URL }}/jobs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CLAUDE_BRIDGE_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.retryRequest) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "c2d3e4f5-a6b7-4c5d-9e0f-1a2b3c4d5e6f",
+      "name": "Wait Retry",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        420
+      ],
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "webhookId": "c7d8e9fa-0b1c-2d3e-4f5a-6b7c8d9e0f1a"
+    },
+    {
+      "id": "e4f5a6b7-c8d9-4e5f-0a1b-2c3d4e5f6a7b",
+      "name": "Get Retry Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        420
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.CLAUDE_BRIDGE_URL }}/jobs/{{ $('Submit Retry').first().json.jobId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CLAUDE_BRIDGE_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f6a7b8c9-d0e1-4f5a-1b2c-3d4e5f6a7b8c",
+      "name": "Retry Still Running?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2420,
+        420
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a8b9c0d1-2e3f-4a5b-6c7d-8e9f0a1b2c3d",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "running",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a9b0c1d2-e3f4-4a5b-7c8d-9e0f1a2b3c4d",
+      "name": "Assess Retry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        420
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Retry (failover model) landed. Succeed with cost/tokens accumulated across BOTH attempts,\n// or throw with the full two-attempt story for the caller's error branch.\nconst spec = $('When Called by Another Workflow').first().json;\nconst a1 = $('Assess Attempt').first().json.attempt1 || {};\nconst job = $input.first().json;\nconst label = spec.label || 'claude job';\n\nfunction evalJob(j) {\n  if (j.status !== 'succeeded') {\n    const lines = String(j.logTail ?? '').split('\\n').map((l) => l.trim()).filter(Boolean);\n    const cause = j.error\n      || [...lines].reverse().find((l) => /FATAL|error|fatal:|denied|not found/i.test(l))\n      || lines.pop() || `job ended \"${j.status}\"`;\n    return { ok: false, reason: (j.status === 'timeout' ? `timed out after ${spec.timeoutMin ?? '?'} min — ` : '') + cause };\n  }\n  const text = String(j.result ?? '');\n  const lastLine = text.trim().split('\\n').pop().replace(/[*`_]/g, '').trim();\n  const blocked = lastLine.match(/^STATUS:\\s*BLOCKED:?\\s*(.*)$/);\n  if (blocked) return { ok: false, reason: `Claude reported BLOCKED — ${blocked[1].trim() || 'no reason given'}` };\n  if (spec.requireStatusOk && !/^STATUS:\\s*OK$/.test(lastLine)) {\n    return { ok: false, reason: 'Claude finished without a \"STATUS: OK\" line — treating as incomplete' };\n  }\n  return { ok: true };\n}\n\nfunction mergeUsage(x, y) {\n  if (!x && !y) return null;\n  const o = { ...(x || {}) };\n  for (const [k, val] of Object.entries(y || {})) if (typeof val === 'number') o[k] = (o[k] || 0) + val;\n  return o;\n}\n\nconst v = evalJob(job);\nconst costUsd = Math.round(((a1.costUsd || 0) + (job.costUsd || 0)) * 100) / 100;\nconst usage = mergeUsage(a1.usage, job.usage);\n\nif (!v.ok) {\n  throw new Error(\n    `${label}: retry on ${spec.retryModel} also failed — ${v.reason}\\n\\n` +\n    `(first attempt on ${spec.model || '(default)'}: ${a1.reason || '?'})\\n\\nbridge job ${job.id} ended \"${job.status}\"` +\n    (job.result ? `\\n\\nresult:\\n${String(typeof job.result === 'string' ? job.result : JSON.stringify(job.result)).slice(-2000)}` : '') +\n    (job.logTail ? `\\n\\nstderr tail:\\n${job.logTail.slice(-2000)}` : '') +\n    `\\n\\nfull logs: n8n/host-bridge/.jobs/${job.id}/`\n  );\n}\n\nreturn [{ json: {\n  jobId: job.id, status: job.status, result: job.result, sessionId: job.sessionId,\n  costUsd, usage, modelUsage: job.modelUsage ?? null,\n  cwd: job.cwd, startedAt: job.createdAt, finishedAt: job.finishedAt,\n  retried: true, models: [spec.model || '(default)', spec.retryModel],\n} }];\n"
+      }
+    }
+  ],
+  "connections": {
+    "When Called by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Build Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Request": {
+      "main": [
+        [
+          {
+            "node": "Submit Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Job": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Get Job Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Job Status": {
+      "main": [
+        [
+          {
+            "node": "Still Running?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still Running?": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Assess Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assess Attempt": {
+      "main": [
+        [
+          {
+            "node": "Retry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry?": {
+      "main": [
+        [
+          {
+            "node": "Submit Retry",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Retry": {
+      "main": [
+        [
+          {
+            "node": "Wait Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Retry": {
+      "main": [
+        [
+          {
+            "node": "Get Retry Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Retry Status": {
+      "main": [
+        [
+          {
+            "node": "Retry Still Running?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Still Running?": {
+      "main": [
+        [
+          {
+            "node": "Wait Retry",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Assess Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

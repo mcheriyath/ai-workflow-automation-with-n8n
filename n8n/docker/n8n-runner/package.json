@@ -1,0 +1,10 @@
+{
+  "name": "sandbox-n8n-runner-javascript-packages",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Default JavaScript package baseline for the sandbox n8n Code node runner. Pin exact versions; a range makes a rebuild non-reproducible.",
+  "dependencies": {
+    "axios": "1.7.7",
+    "lodash": "4.17.21"
+  }
+}

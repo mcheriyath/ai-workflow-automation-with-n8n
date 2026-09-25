@@ -1,0 +1,6 @@
+# Default Python packages for the sandbox n8n Code node runner.
+# Pin exact versions (==) so rebuilds are reproducible.
+boto3==1.35.68
+numpy==2.1.3
+pandas==2.2.3
+requests==2.32.3
